@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>中英对照打印预览 (V3)</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <div class="main-container">
+        <div class="left-panel">
+            <div class="input-area">
+                <label for="english-input">英文内容 (English Content)</label>
+                <textarea id="english-input" placeholder="Enter your English text here."></textarea>
+                
+                <label for="chinese-input">中文内容 (Chinese Content)</label>
+                <textarea id="chinese-input" placeholder="在这里输入中文内容。"></textarea>
+            </div>
+
+            <div class="settings-panel">
+                <h3>页面设置 (Page Settings)</h3>
+                <div class="setting-grid">
+                    <div class="setting-item">
+                        <label for="chinese-font-size">中文字号 (px):</label>
+                        <input type="number" id="chinese-font-size" value="16" min="1">
+                    </div>
+                    <div class="setting-item">
+                        <label for="english-font-size">英文字号 (px):</label>
+                        <input type="number" id="english-font-size" value="10" min="1">
+                    </div>
+                    <div class="setting-item">
+                        <label for="line-spacing">行距:</label>
+                        <input type="number" id="line-spacing" value="1.5" min="1" step="0.1">
+                    </div>
+
+                    <div class="setting-item">
+                        <label for="chinese-font-family">中文字体:</label>
+                        <select id="chinese-font-family">
+                            <option value="SimSun, Songti SC, NSimSun, FangSong, STSong">宋体 (SimSun)</option>
+                            <option value="Microsoft YaHei, PingFang SC, Hiragino Sans GB, sans-serif" selected>微软雅黑 (YaHei)</option>
+                            <option value="KaiTi, STKaiti, BiauKai">楷体 (KaiTi)</option>
+                            <option value="SimHei, Heiti SC, STHeiti">黑体 (SimHei)</option>
+                        </select>
+                    </div>
+                     <div class="setting-item">
+                        <label for="english-font-family">英文字体:</label>
+                        <select id="english-font-family">
+                            <option value="Times New Roman, serif">Times New Roman</option>
+                            <option value="Arial, Helvetica, sans-serif" selected>Arial</option>
+                            <option value="Georgia, serif">Georgia</option>
+                            <option value="Verdana, sans-serif">Verdana</option>
+                        </select>
+                    </div>
+                    <div></div> <div class="setting-item">
+                        <label for="margin-top">上边距 (mm):</label>
+                        <input type="number" id="margin-top" value="20" min="0">
+                    </div>
+                    <div class="setting-item">
+                        <label for="margin-left">左边距 (mm):</label>
+                        <input type="number" id="margin-left" value="25" min="0">
+                    </div>
+                    <div class="setting-item">
+                        <label for="margin-right">右边距 (mm):</label>
+                        <input type="number" id="margin-right" value="25" min="0">
+                    </div>
+                     <div class="setting-item">
+                        <label for="margin-bottom">下边距 (mm):</label>
+                        <input type="number" id="margin-bottom" value="20" min="0">
+                    </div>
+                </div>
+                <button id="generate-preview-btn">更新预览</button>
+                <button id="print-btn" class="print-button">打印</button>
+            </div>
+        </div>
+
+        <div class="right-panel">
+            <div id="page-container">
+                </div>
+        </div>
+    </div>
+    
+    <script src="script.js"></script>
+</body>
+</html>
