@@ -30,7 +30,7 @@ function rubyAnnotation(hook, vm) {
       return;
     }
 
-    const mainFilePath = vm.route.file;
+    const mainFilePath = vm.config.nameLink.replace('/','') + vm.route.file;
 
     // 同样只处理 .md 文件
     if (mainFilePath.endsWith('.md')) {
