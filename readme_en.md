@@ -1,4 +1,4 @@
-# Chinese-English Bilingual Reading
+# Bilingual Reading
 This is a Docsify-based plugin for Chinese documents with English translations.
 
 ## How to use
