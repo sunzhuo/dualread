@@ -1,7 +1,7 @@
 # Chinese-English Bilingual Reading
 This is a Docsify-based plugin for Chinese documents with English translations.
 
-## Usage
+## How to use
 Include dualread.js in index.html and add an English *_en.md file to the same directory as the Chinese *.md file to ensure one-to-one correspondence between the Chinese and English paragraphs.
 
 ## Example

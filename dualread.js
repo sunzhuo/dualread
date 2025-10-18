@@ -1,267 +1,112 @@
-(function () {
-  'use strict';
+// plugins/ruby-annotation.js
 
-  // Simple cache to avoid repeated fetches for the same annotation file.
-  var annotationCache = Object.create(null);
+/**
+ * Docsify 双语注音插件（最终版）
+ * * 工作原理:
+ * 1. 使用 'beforeEach' 钩子捕获并暂存原始的 Markdown 内容，但不修改它。
+ * 这确保 Docsify 能基于干净的 Markdown 生成正确的边栏目录 (TOC)。
+ * 2. 使用 'afterEach' 钩子，在 Docsify 将 Markdown 渲染为 HTML 之后执行。
+ * 此时，边栏已生成完毕。我们在这个钩子中获取对应的 *_en.md 文件。
+ * 3. 插件将渲染后的 HTML 转换成一个临时的 DOM 结构。
+ * 4. 插件逐一遍历 HTML 中的元素（如 <p>, <h1>, <li> 等），并根据暂存的
+ * 原始 Markdown 内容和 *_en.md 的内容，将它们替换为 <ruby> 标签结构。
+ * 5. 最后，将修改后的 HTML 交还给 Docsify 进行最终的页面显示。
+ */
+function rubyAnnotation(hook, vm) {
 
-  function isAbsolute(url) {
-    return /^([a-z]+:)?\/\//i.test(url || '');
-  }
+  // 钩子 1: 在 Markdown 解析前，仅保存原始内容。
+  hook.beforeEach(function (content, next) {
+    // 将当前页面的原始 Markdown 内容暂存到 vm 对象上，供 afterEach 钩子使用。
+    vm.originalMarkdown = content;
+    // 直接调用 next，不修改任何内容，保证 Docsify 能生成干净的目录。
+    next(content);
+  });
 
-  function normalizeBasePath(basePath) {
-    if (Array.isArray(basePath)) {
-      return basePath[0] || '';
-    }
-    return basePath || '';
-  }
-
-  function joinBasePath(basePath, file) {
-    if (!file) {
-      return null;
-    }
-
-    if (isAbsolute(file)) {
-      return file;
-    }
-
-    var base = normalizeBasePath(basePath);
-    if (!base) {
-      return file;
-    }
-
-    if (isAbsolute(base)) {
-      return base.replace(/\/?$/, '/') + file.replace(/^\//, '');
+  // 钩子 2: 在 HTML 渲染后，执行注音添加操作。
+  hook.afterEach(function (html, next) {
+    // 检查是否存在暂存的 Markdown，如果不存在则直接跳过。
+    if (!vm.originalMarkdown) {
+      next(html);
+      return;
     }
 
-    return base.replace(/\/?$/, '/') + file.replace(/^\//, '');
-  }
+    const mainFilePath = vm.route.file;
 
-  function buildFetchOptions(vm) {
-    var opts = {};
-    if (vm.config.fetchOptions && typeof vm.config.fetchOptions === 'object') {
-      Object.keys(vm.config.fetchOptions).forEach(function (key) {
-        opts[key] = vm.config.fetchOptions[key];
-      });
-    }
+    // 同样只处理 .md 文件
+    if (mainFilePath.endsWith('.md')) {
+      const enFilePath = mainFilePath.replace('.md', '_en.md');
 
-    var headers = vm.config.requestHeaders;
-    if (headers && typeof headers === 'object') {
-      opts.headers = Object.assign({}, opts.headers || {}, headers);
-    }
-
-    if (!opts.cache) {
-      opts.cache = 'force-cache';
-    }
-
-    return opts;
-  }
-
-  function fetchAnnotation(url, vm) {
-    if (!url) {
-      return Promise.resolve(null);
-    }
-
-    if (annotationCache[url]) {
-      return annotationCache[url];
-    }
-
-    var fetchOptions = buildFetchOptions(vm);
-
-    annotationCache[url] = fetch(url, fetchOptions).then(function (response) {
-      if (!response.ok) {
-        if (response.status === 404) {
-          return null;
-        }
-        throw new Error('Request failed: ' + response.status);
-      }
-      return response.text();
-    }).catch(function (error) {
-      console.warn('[docsify-ruby]', 'Failed to load annotation file:', url, error);
-      return null;
-    });
-
-    return annotationCache[url];
-  }
-
-  function splitSegments(text) {
-    var normalized = String(text || '').replace(/\r\n/g, '\n');
-    var segments = [];
-    var lastIndex = 0;
-    var match;
-    var separatorPattern = /\n{2,}/g;
-
-    while ((match = separatorPattern.exec(normalized)) !== null) {
-      segments.push({
-        block: normalized.slice(lastIndex, match.index),
-        separator: match[0]
-      });
-      lastIndex = match.index + match[0].length;
-    }
-
-    segments.push({
-      block: normalized.slice(lastIndex),
-      separator: ''
-    });
-
-    return segments;
-  }
-
-  function splitAnnotations(text) {
-    return String(text || '')
-      .replace(/\r\n/g, '\n')
-      .split(/\n{2,}/)
-      .map(function (block) { return block.trim(); })
-      .filter(function (block) { return block.length > 0; });
-  }
-
-  function escapeHtml(str) {
-    return String(str || '').replace(/[&<>"']/g, function (char) {
-      switch (char) {
-        case '&':
-          return '&amp;';
-        case '<':
-          return '&lt;';
-        case '>':
-          return '&gt;';
-        case '"':
-          return '&quot;';
-        case '\'':
-          return '&#39;';
-        default:
-          return char;
-      }
-    });
-  }
-
-  function shouldAnnotate(block) {
-    var trimmed = block.trim();
-    if (!trimmed) {
-      return false;
-    }
-
-    if (/^<ruby[\s>]/i.test(trimmed)) {
-      return false;
-    }
-
-    if (/^`{3}/.test(trimmed) || /^~{3}/.test(trimmed)) {
-      return false;
-    }
-
-    if (/^#{1,6}\s/.test(trimmed)) {
-      return false;
-    }
-
-    if (/^[-*+]\s/.test(trimmed) || /^\d+\.\s/.test(trimmed)) {
-      return false;
-    }
-
-    if (/^>/.test(trimmed)) {
-      return false;
-    }
-
-    if (/^\|/.test(trimmed)) {
-      return false;
-    }
-
-    if (/^<([a-z]+)([\s>]|$)/i.test(trimmed) && !/^<p[\s>]/i.test(trimmed)) {
-      return false;
-    }
-
-    return true;
-  }
-
-  function wrapWithRuby(block, annotation) {
-    var leading = (block.match(/^\s*/) || [''])[0];
-    var trailing = (block.match(/\s*$/) || [''])[0];
-    var core = block.trim();
-
-    if (!core) {
-      return block;
-    }
-
-    var sanitizedAnnotation = escapeHtml(annotation)
-      .replace(/\r\n/g, '\n')
-      .split('\n')
-      .map(function (line) { return line.trim(); })
-      .join('<br>');
-
-    return leading + '<ruby>' + core + '<rt>' + sanitizedAnnotation + '</rt></ruby>' + trailing;
-  }
-
-  function mergeContent(baseContent, annotationContent) {
-    var segments = splitSegments(baseContent);
-    var annotations = splitAnnotations(annotationContent);
-
-    if (!annotations.length) {
-      return baseContent;
-    }
-
-    var annotationIndex = 0;
-
-    segments.forEach(function (segment) {
-      if (annotationIndex >= annotations.length) {
-        return;
-      }
-
-      if (!shouldAnnotate(segment.block)) {
-        return;
-      }
-
-      segment.block = wrapWithRuby(segment.block, annotations[annotationIndex]);
-      annotationIndex += 1;
-    });
-
-    if (annotationIndex < annotations.length) {
-      console.warn('[docsify-ruby]', 'Unused annotations:', annotations.length - annotationIndex);
-    }
-
-    return segments.map(function (segment) {
-      return segment.block + segment.separator;
-    }).join('');
-  }
-
-  function createPlugin() {
-    return function (hook, vm) {
-      hook.beforeEach(function (content, next) {
-        var file = vm.route && vm.route.file;
-
-        if (!file || !/\.md$/i.test(file)) {
-          next(content);
-          return;
-        }
-
-        var annotationFile = file.replace(/\.md$/i, '_en.md');
-        if (annotationFile === file) {
-          next(content);
-          return;
-        }
-
-        var annotationUrl = joinBasePath(vm.config.basePath, annotationFile);
-
-        fetchAnnotation(annotationUrl, vm).then(function (annotationContent) {
-          if (!annotationContent) {
-            next(content);
-            return;
+      fetch(enFilePath)
+        .then(response => {
+          if (!response.ok) {
+            // 如果英文文件不存在，清除暂存并返回原始 HTML。
+            delete vm.originalMarkdown;
+            next(html);
+            return null;
           }
+          return response.text();
+        })
+        .then(enContent => {
+          if (enContent) {
+            // 将原始 Markdown 和英文内容按行分割，并过滤掉空行。
+            const mainLines = vm.originalMarkdown.split('\n').filter(line => line.trim() !== '');
+            const enLines = enContent.split('\n').filter(line => line.trim() !== '');
 
-          try {
-            var merged = mergeContent(content, annotationContent);
-            next(merged);
-          } catch (error) {
-            console.error('[docsify-ruby]', 'Failed to merge annotation content for', file, error);
-            next(content);
+            // 创建一个临时的 DOM 容器来操作渲染好的 HTML。
+            const container = document.createElement('div');
+            container.innerHTML = html;
+
+            // 选择所有可能包含需要注音文本的块级元素。
+            // 顺序通常与 Markdown 源文件中的行顺序一致。
+            const elements = container.querySelectorAll('p, li, h1, h2, h3, h4, h5, h6, blockquote, code');
+
+            // 正则表达式，用于移除英文行可能包含的 Markdown 标记。
+            const markdownMarkerRegex = /^(#{1,6}\s+|[\*\-\+]\s+|>\s*|\d+\.\s+)/;
+
+            let lineIndex = 0; // 用于追踪 Markdown 文件的行号。
+            elements.forEach(element => {
+                // 跳过没有文本内容的元素或自定义的 sidebar 元素
+                if (!element.textContent.trim() || element.closest('.sidebar-nav')) {
+                    return;
+                }
+
+                if (lineIndex < mainLines.length) {
+                    const mainText = element.textContent; // 获取元素当前的文本内容
+                    // 获取对应的英文行，并移除其行首的 Markdown 标记。
+                    const enText = (enLines[lineIndex] || '').replace(markdownMarkerRegex, '').trim();
+
+                    if (mainText && enText) {
+                        // 使用 <ruby> 标签重建元素的内部 HTML。
+                        element.innerHTML = `<ruby>${mainText}<rt>${enText}</rt></ruby>`;
+                    }
+                    lineIndex++;
+                }
+            });
+
+            // 清理工作：删除暂存的 Markdown 内容，避免影响其他页面。
+            delete vm.originalMarkdown;
+            // 将修改后的 HTML 内容传递给 Docsify。
+            next(container.innerHTML);
+          } else {
+            delete vm.originalMarkdown;
+            next(html);
           }
-        }).catch(function () {
-          next(content);
+        })
+        .catch(error => {
+          console.error('获取或处理注音文件时出错:', error);
+          delete vm.originalMarkdown;
+          next(html);
         });
-      });
-    };
-  }
+    } else {
+      // 如果不是 .md 文件，也需要清理暂存值并继续。
+      delete vm.originalMarkdown;
+      next(html);
+    }
+  });
+}
 
-  if (typeof window !== 'undefined') {
-    window.$docsify = window.$docsify || {};
-    var plugins = window.$docsify.plugins || [];
-    plugins.push(createPlugin());
-    window.$docsify.plugins = plugins;
-  }
-}());
+// --- 插件注册 ---
+if (!window.$docsify) {
+  window.$docsify = {};
+}
+window.$docsify.plugins = [].concat(window.$docsify.plugins || [], rubyAnnotation);
