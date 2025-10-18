@@ -1,112 +1,275 @@
-// plugins/ruby-annotation.js
+// 这是一个集成了“Ruby注音”和“样式设置”功能的 Docsify 插件套件。
+// v6.0 更新:
+// 1. 设置面板会随着侧边栏的折叠/展开而同步显示/隐藏。
+// 2. 添加了平滑的滑入/滑出动画效果。
 
-/**
- * Docsify 双语注音插件（最终版）
- * * 工作原理:
- * 1. 使用 'beforeEach' 钩子捕获并暂存原始的 Markdown 内容，但不修改它。
- * 这确保 Docsify 能基于干净的 Markdown 生成正确的边栏目录 (TOC)。
- * 2. 使用 'afterEach' 钩子，在 Docsify 将 Markdown 渲染为 HTML 之后执行。
- * 此时，边栏已生成完毕。我们在这个钩子中获取对应的 *_en.md 文件。
- * 3. 插件将渲染后的 HTML 转换成一个临时的 DOM 结构。
- * 4. 插件逐一遍历 HTML 中的元素（如 <p>, <h1>, <li> 等），并根据暂存的
- * 原始 Markdown 内容和 *_en.md 的内容，将它们替换为 <ruby> 标签结构。
- * 5. 最后，将修改后的 HTML 交还给 Docsify 进行最终的页面显示。
- */
-function rubyAnnotation(hook, vm) {
+(function () {
+  'use strict';
 
-  // 钩子 1: 在 Markdown 解析前，仅保存原始内容。
-  hook.beforeEach(function (content, next) {
-    // 将当前页面的原始 Markdown 内容暂存到 vm 对象上，供 afterEach 钩子使用。
-    vm.originalMarkdown = content;
-    // 直接调用 next，不修改任何内容，保证 Docsify 能生成干净的目录。
-    next(content);
-  });
+  // =========================================================================
+  // == PART 1: RUBY ANNOTATION PLUGIN LOGIC (No changes in this part)      ==
+  // =========================================================================
 
-  // 钩子 2: 在 HTML 渲染后，执行注音添加操作。
-  hook.afterEach(function (html, next) {
-    // 检查是否存在暂存的 Markdown，如果不存在则直接跳过。
-    if (!vm.originalMarkdown) {
-      next(html);
-      return;
-    }
+  function rubyAnnotationPlugin(hook, vm) {
+    hook.beforeEach(function (content, next) {
+      vm.originalMarkdown = content;
+      next(content);
+    });
 
-    const mainFilePath = vm.config.nameLink.slice(0, -1) + vm.route.file;
-
-    // 同样只处理 .md 文件
-    if (mainFilePath.endsWith('.md')) {
-      const enFilePath = mainFilePath.replace('.md', '_en.md');
-
-      fetch(enFilePath)
-        .then(response => {
-          if (!response.ok) {
-            // 如果英文文件不存在，清除暂存并返回原始 HTML。
-            delete vm.originalMarkdown;
-            next(html);
-            return null;
-          }
-          return response.text();
-        })
-        .then(enContent => {
-          if (enContent) {
-            // 将原始 Markdown 和英文内容按行分割，并过滤掉空行。
-            const mainLines = vm.originalMarkdown.split('\n').filter(line => line.trim() !== '');
-            const enLines = enContent.split('\n').filter(line => line.trim() !== '');
-
-            // 创建一个临时的 DOM 容器来操作渲染好的 HTML。
-            const container = document.createElement('div');
-            container.innerHTML = html;
-
-            // 选择所有可能包含需要注音文本的块级元素。
-            // 顺序通常与 Markdown 源文件中的行顺序一致。
-            const elements = container.querySelectorAll('p, li, h1, h2, h3, h4, h5, h6, blockquote, code');
-
-            // 正则表达式，用于移除英文行可能包含的 Markdown 标记。
-            const markdownMarkerRegex = /^(#{1,6}\s+|[\*\-\+]\s+|>\s*|\d+\.\s+)/;
-
-            let lineIndex = 0; // 用于追踪 Markdown 文件的行号。
-            elements.forEach(element => {
-                // 跳过没有文本内容的元素或自定义的 sidebar 元素
-                if (!element.textContent.trim() || element.closest('.sidebar-nav')) {
-                    return;
-                }
-
+    hook.afterEach(function (html, next) {
+      if (!vm.originalMarkdown) {
+        next(html);
+        return;
+      }
+      // 构建主文件路径(主路径+文件路径)
+      const mainFilePath = vm.config.nameLink.slice(0, -1) + vm.route.file;
+      if (mainFilePath.endsWith('.md')) {
+        const enFilePath = mainFilePath.replace('.md', '_en.md');
+        fetch(enFilePath)
+          .then(response => {
+            if (!response.ok) {
+              delete vm.originalMarkdown;
+              next(html);
+              return null;
+            }
+            return response.text();
+          })
+          .then(enContent => {
+            if (enContent) {
+              const mainLines = vm.originalMarkdown.split('\n').filter(line => line.trim() !== '');
+              const enLines = enContent.split('\n').filter(line => line.trim() !== '');
+              const container = document.createElement('div');
+              container.innerHTML = html;
+              const elements = container.querySelectorAll('p, li, h1, h2, h3, h4, h5, h6, blockquote, code');
+              const markdownMarkerRegex = /^(#{1,6}\s+|[\*\-\+]\s+|>\s*|\d+\.\s+)/;
+              let lineIndex = 0;
+              elements.forEach(element => {
+                if (!element.textContent.trim() || element.closest('.sidebar-nav')) { return; }
                 if (lineIndex < mainLines.length) {
-                    const mainText = element.textContent; // 获取元素当前的文本内容
-                    // 获取对应的英文行，并移除其行首的 Markdown 标记。
-                    const enText = (enLines[lineIndex] || '').replace(markdownMarkerRegex, '').trim();
-
-                    if (mainText && enText) {
-                        // 使用 <ruby> 标签重建元素的内部 HTML。
-                        element.innerHTML = `<ruby>${mainText}<rt>${enText}</rt></ruby>`;
-                    }
-                    lineIndex++;
+                  const mainText = element.textContent;
+                  const enText = (enLines[lineIndex] || '').replace(markdownMarkerRegex, '').trim();
+                  if (mainText && enText) {
+                    element.innerHTML = `<ruby>${mainText}<rt>${enText}</rt></ruby>`;
+                  }
+                  lineIndex++;
                 }
-            });
-
-            // 清理工作：删除暂存的 Markdown 内容，避免影响其他页面。
-            delete vm.originalMarkdown;
-            // 将修改后的 HTML 内容传递给 Docsify。
-            next(container.innerHTML);
-          } else {
+              });
+              delete vm.originalMarkdown;
+              next(container.innerHTML);
+            } else {
+              delete vm.originalMarkdown;
+              next(html);
+            }
+          })
+          .catch(error => {
+            console.error('获取或处理注音文件时出错:', error);
             delete vm.originalMarkdown;
             next(html);
-          }
-        })
-        .catch(error => {
-          console.error('获取或处理注音文件时出错:', error);
-          delete vm.originalMarkdown;
-          next(html);
-        });
-    } else {
-      // 如果不是 .md 文件，也需要清理暂存值并继续。
-      delete vm.originalMarkdown;
-      next(html);
-    }
-  });
-}
+          });
+      } else {
+        delete vm.originalMarkdown;
+        next(html);
+      }
+    });
+  }
 
-// --- 插件注册 ---
-if (!window.$docsify) {
-  window.$docsify = {};
-}
-window.$docsify.plugins = [].concat(window.$docsify.plugins || [], rubyAnnotation);
+  // =========================================================================
+  // == PART 2: STYLE SETTINGS PLUGIN LOGIC (Changes are here)              ==
+  // =========================================================================
+
+  function styleSettingsPlugin(hook, vm) {
+    const STORAGE_KEY = 'bilingual_style_settings_v3'; 
+    const BASE_DEFAULT_SETTINGS = {
+      en: { fontSize: 0.5, color: '#7aadff' },
+      zh: { fontSize: 1.3, color: null }
+    };
+
+    function rgbToHex(rgb) {
+      if (!rgb || !rgb.startsWith('rgb')) return rgb;
+      const parts = rgb.match(/^rgb\((\d+),\s*(\d+),\s*(\d+)\)$/);
+      if (!parts) return '#333333';
+      delete parts[0];
+      for (let i = 1; i <= 3; ++i) {
+        parts[i] = parseInt(parts[i], 10).toString(16);
+        if (parts[i].length === 1) parts[i] = '0' + parts[i];
+      }
+      return '#' + parts.join('');
+    }
+
+    function getThemeTextColor() {
+      const pElement = document.querySelector('.markdown-section p');
+      if (pElement) {
+        return rgbToHex(window.getComputedStyle(pElement).color);
+      }
+      return '#333333';
+    }
+
+    function getDefaults() {
+      const defaults = JSON.parse(JSON.stringify(BASE_DEFAULT_SETTINGS));
+      defaults.zh.color = getThemeTextColor();
+      return defaults;
+    }
+
+    function loadSettings() {
+      try {
+        const storedSettings = localStorage.getItem(STORAGE_KEY);
+        const defaults = getDefaults();
+        const loaded = storedSettings ? JSON.parse(storedSettings) : {};
+        return {
+          en: { ...defaults.en, ...loaded.en },
+          zh: { ...defaults.zh, ...loaded.zh }
+        };
+      } catch (e) {
+        return getDefaults();
+      }
+    }
+
+    function saveSettings(settings) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+    }
+
+    function applyStyles(settings) {
+      const styleId = 'custom-bilingual-styles';
+      let styleTag = document.getElementById(styleId);
+      if (!styleTag) {
+        styleTag = document.createElement('style');
+        styleTag.id = styleId;
+        document.head.appendChild(styleTag);
+      }
+      styleTag.innerHTML = `
+        .markdown-section p ruby, .markdown-section li ruby, .markdown-section blockquote ruby {
+          font-size: ${settings.zh.fontSize}em !important;
+          color: ${settings.zh.color} !important;
+        }
+        .markdown-section rt {
+          font-size: ${settings.en.fontSize}em !important;
+          color: ${settings.en.color} !important;
+        }
+      `;
+    }
+
+    /**
+     * **CHANGED**: Added transition and transform properties to the panel's CSS.
+     */
+    function createPanelHTML(settings) {
+      return `
+        <div id="style-settings-panel">
+          <div class="setting-group">
+            <div class="controls">
+              <label>英文：</label>
+              <input type="number" id="en-font-size-input" value="${settings.en.fontSize}" min="0.0" max="1.0" step="0.1">
+              <label>em</label>
+              <input type="color" id="en-color-picker" value="${settings.en.color}">
+            </div>
+            <div class="controls">
+              <label>中文：</label>
+              <input type="number" id="zh-font-size-input" value="${settings.zh.fontSize}" min="1.0" max="2.0" step="0.1">
+              <label>em</label>
+              <input type="color" id="zh-color-picker" value="${settings.zh.color}">
+            </div>
+          </div>
+        </div>
+        <style>
+          #style-settings-panel {
+            position: fixed;
+            bottom: 0;
+            padding: 10px 15px;
+            z-index: 100;
+          }
+          #style-settings-panel .setting-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px; /* Space between Chinese and English rows */
+          }
+          #style-settings-panel label {
+            flex-shrink: 0;
+          }
+          #style-settings-panel input[type="number"] {
+            width: 50px;
+            border: 1px solid #ccc;
+            padding: 4px;
+          }
+          #style-settings-panel input[type="color"] {
+            width: 30px;
+            margin-left: 10px;
+            cursor: pointer;
+          }
+        </style>
+      `;
+    }
+    
+    function setupEventListeners(settings) {
+      const syncAndUpdate = (lang, type, value) => {
+        const finalValue = type === 'fontSize' ? parseFloat(value) : value;
+        if (type === 'fontSize') { settings[lang].fontSize = finalValue; } 
+        else if (type === 'color') { settings[lang].color = finalValue; }
+        applyStyles(settings);
+        saveSettings(settings);
+      };
+      document.getElementById('en-font-size-input').addEventListener('input', e => syncAndUpdate('en', 'fontSize', e.target.value));
+      document.getElementById('en-color-picker').addEventListener('input', e => syncAndUpdate('en', 'color', e.target.value));
+      document.getElementById('zh-font-size-input').addEventListener('input', e => syncAndUpdate('zh', 'fontSize', e.target.value));
+      document.getElementById('zh-color-picker').addEventListener('input', e => syncAndUpdate('zh', 'color', e.target.value));
+    }
+
+    let currentSettings = loadSettings();
+
+    hook.doneEach(function () {
+      if (!currentSettings.zh.color) {
+        currentSettings.zh.color = getThemeTextColor();
+      }
+      applyStyles(currentSettings);
+      
+      if (document.getElementById('style-settings-panel')) { return; }
+
+      const panelHTML = createPanelHTML(currentSettings);
+      document.body.insertAdjacentHTML('beforeend', panelHTML);
+      const settingsPanel = document.getElementById('style-settings-panel');
+      setupEventListeners(currentSettings);
+
+      // **NEW**: Logic to sync panel visibility with sidebar collapse/expand.
+      // ----------------------------------------------------------------------
+      
+      // 1. Function to check the body class and toggle the panel's position.
+      const syncPanelVisibility = () => {
+        if (document.body.classList.contains('close')) {
+          // If sidebar is closed, move panel off-screen to the left.
+          settingsPanel.style.transform = 'translateX(-100%)';
+        } else {
+          // If sidebar is open, move panel back to its original position.
+          settingsPanel.style.transform = 'translateX(0)';
+        }
+      };
+
+      // 2. Create a MutationObserver to watch for class changes on the body.
+      const observer = new MutationObserver((mutationsList) => {
+        for (const mutation of mutationsList) {
+          if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
+            syncPanelVisibility(); // Sync visibility whenever body class changes.
+            return;
+          }
+        }
+      });
+
+      // 3. Start observing the body for attribute changes.
+      observer.observe(document.body, { attributes: true });
+      
+      // 4. Run the check once immediately to set the initial state correctly.
+      syncPanelVisibility();
+    });
+  }
+
+  // =========================================================================
+  // == PART 3: PLUGIN REGISTRATION (No changes in this part)               ==
+  // =========================================================================
+
+  if (!window.$docsify) {
+    window.$docsify = {};
+  }
+  window.$docsify.plugins = [].concat(
+    window.$docsify.plugins || [],
+    rubyAnnotationPlugin,
+    styleSettingsPlugin
+  );
+
+})();
