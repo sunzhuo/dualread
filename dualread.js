@@ -213,6 +213,7 @@
     }
 
     let currentSettings = loadSettings();
+    const mobileQuery = window.matchMedia('(max-width: 768px)');
 
     hook.doneEach(function () {
       if (!currentSettings.zh.color) {
@@ -234,10 +235,16 @@
       const syncPanelVisibility = () => {
         if (document.body.classList.contains('close')) {
           // If sidebar is closed, move panel off-screen to the left.
-          settingsPanel.style.transform = 'translateX(-100%)';
+          if(mobileQuery.matches)
+            settingsPanel.style.transform = 'translateY(0)';
+          else
+            settingsPanel.style.transform = 'translateX(-100%)';
         } else {
           // If sidebar is open, move panel back to its original position.
-          settingsPanel.style.transform = 'translateX(0)';
+          if(mobileQuery.matches)
+            settingsPanel.style.transform = 'translateX(-100%)';
+          else
+            settingsPanel.style.transform = 'translateX(0)';
         }
       };
 
