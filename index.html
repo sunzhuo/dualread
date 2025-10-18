@@ -6,31 +6,13 @@
   <title>双语阅读演示</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/docsify-themeable@0.9/dist/css/theme-simple.css">
   <style>
-      /* * 目标 1: 增大正文（非标题）中原文的字号 
-      * .markdown-section 是 docsify 的主内容区
-      * 我们只选择段落(p)和列表项(li)中的 <ruby> 标签来增大字体
-      */
-      .markdown-section p ruby,
-      .markdown-section li ruby,
-      .markdown-section blockquote ruby {
-        font-size: 1.3em; /* 增大 10%，你可以根据喜好调整，例如 1.15em */
-      }
-
-      /* * 目标 2: 减小所有英文注释的字号 (包括标题和正文) 
-      * <rt> 是注音标签
-      * 使用 0.6em 表示其大小为父元素（<ruby>）字号的 60%
-      * 这样，标题中的注释会自动按标题字号缩放，正文中的注释会按正文字号缩放
-      */
-      .markdown-section rt {
-        font-size: 0.5em; /* 缩小字号，你可以调整为 0.5em 或 0.7em */
-        color: #a3c7ff;     /* 将注释颜色变淡，使其不那么显眼 */
-        user-select: none; /* 让注释文字不可选中，提升阅读体验 */
-      }
-    </style>
+    .markdown-section {
+      padding: 1rem;
+    }
+  </style>
 </head>
 <body>
   <div id="app">加载中…</div>
-
   <script>
     window.$docsify = {
       name: '双语阅读',
